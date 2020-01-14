@@ -1,0 +1,18 @@
+version: '3'
+services:
+  api:
+    container_name: acoustic-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: "npm run start:dev"
+    volumes:
+      - ./:/home/node
+    ports:
+      - "3000:3000"
+    networks:
+      - acoustic
+
+networks:
+  acoustic:
+    external: true
