@@ -3,6 +3,8 @@ import { AxiosResponse } from 'axios';
 
 @Injectable()
 export class ContentService {
+  // normally I would store this as an environment variable but seeing as it's
+  // not sensitive (as far as I can tell) I'm going to leave it in the code here
   private apiDomain = 'https://my12.digitalexperience.ibm.com';
   private apiAccount = '859f2008-a40a-4b92-afd0-24bb44d10124';
   private apiBaseString =
@@ -10,16 +12,20 @@ export class ContentService {
   constructor(private readonly httpService: HttpService) {
   }
 
-  public getById(id: string): Promise<AxiosResponse> {
-    return this.httpService.get(this.getContentUrl(id)).toPromise();
+  public getById(id: string, fields?: string): Promise<AxiosResponse> {
+    return this.httpService.get(this.getContentUrl(id, fields)).toPromise();
   }
 
+  /**
+   * Search for query and return filtered fields
+   * @param contentId
+   */
   public async searchByType(contentId: string) {
     const response = await this.httpService.get(this.getSearchUrl(contentId)).toPromise();
     if (response.data?.numFound < 1) {
       throw new NotFoundException();
     }
-    return this.getFields(['id', 'created', 'name', 'url'], response.data.documents);
+    return await this.getFields(['id', 'created', 'name', 'url'], response.data.documents);
   }
 
   /**
@@ -28,30 +34,34 @@ export class ContentService {
    * @param properties The properties you want in the return object[s]
    * @param data The object or array of objects you want to filter properties out of
    */
-  public getFields(properties: string[],
-                   data: {[s: string]: any} |
-                     Array<{[s: string]: string}>): {[s: string]: any}|Array<{[s: string]: any}>|false {
-    const returnHash: {[str: string]: string} = {};
+  public async getFields(properties: string[],
+                         data: {[s: string]: any} | Array<{[s: string]: string}>):
+                          Promise<{ [s: string]: any } | Array<{ [s: string]: any }> | false> {
+    const returnObj: {[str: string]: string} = {};
     if (!Array.isArray(data)) {
       const dataKeysList = Object.keys(data);
 
+      // iterate through list of properties to find and return, if they exist,
+      // add to return object
       for (const prop of properties) {
         if (dataKeysList.includes(prop)) {
-          returnHash[prop] = data[prop];
+          returnObj[prop] = data[prop];
         }
       }
 
       if (data.type?.toLowerCase() === 'hero image') {
-        returnHash.image = `${this.apiDomain}${data.elements.image.url}`;
+        returnObj.image = `${this.apiDomain}${data.elements.image.url}`;
       }
 
-      return Object.keys(returnHash).length < 1 ? false : returnHash;
+      return Object.keys(returnObj).length < 1 ? false : returnObj;
     } else {
-      return data.map((value, index) => {
+      const returnArray = [];
+      for (const obj of data) {
         const propertiesCopy = [...properties];
-        const buildMap = this.buildMap(propertiesCopy, value);
-        return buildMap || {};
-      });
+        const buildMap = await this.buildMap(propertiesCopy, obj);
+        returnArray.push(buildMap || {});
+      }
+      return returnArray;
     }
   }
 
@@ -63,15 +73,23 @@ export class ContentService {
    * @param iteration
    * @param returnMap
    */
-  public buildMap(propertiesList: string[],
-                  object: {[s: string]: any},
-                  iteration: number = 0,
-                  returnMap: {[str: string]: string} = {}): {[str: string]: string} | false {
+  public async buildMap(propertiesList: string[],
+                        object: {[s: string]: any},
+                        iteration: number = 0,
+                        returnMap: {[str: string]: any} = {}): Promise<{ [str: string]: any } | false> {
     const prop = propertiesList.shift();
     if (Object.keys(object).includes(prop)) {
       returnMap[prop] = object[prop];
     } else if (!Object.keys(object).includes(prop) && prop === 'url') {
       returnMap.url = `${this.apiBaseString}delivery/v1/content/${object.id}`;
+    }
+
+    // if we're getting an array of hero images make sure to get the resource
+    //   url to the hero image so we can render on the page
+    //   This is pretty inefficient
+    if (object.type?.toLowerCase() === 'hero image') {
+      const fullObject = await this.getById(object.id, 'elements');
+      returnMap.image = fullObject.data.elements?.image?.url ? `${this.apiDomain}${fullObject.data.elements?.image?.url}` : false;
     }
 
     if (propertiesList.length > 0) {
@@ -83,8 +101,14 @@ export class ContentService {
     }
   }
 
-  public getContentUrl(id): string {
-    return `${this.apiBaseString}delivery/v1/content/${id}`;
+  /**
+   * Returns a constructed url for retrieving a specific content item by id
+   * Can optionally add comma-separated string of fields to shrink response
+   * @param id
+   * @param fields
+   */
+  public getContentUrl(id, fields?: string): string {
+    return `${this.apiBaseString}delivery/v1/content/${id}${fields ? `?fields=${fields}` : ''}`;
   }
 
   public getSearchUrl(id: string): string {

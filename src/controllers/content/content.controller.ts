@@ -7,6 +7,12 @@ export class ContentController {
   constructor(private readonly contentService: ContentService) {
   }
 
+  /**
+   * Take in an ID or media type and query the acoustic content management service
+   * for it. Take the response from the CMS and filter down to the minimum properties
+   * needed to display on the frontend
+   * @param contentId
+   */
   @Get(':id')
   public async getById(@Param('id') contentId: string) {
     let response;
@@ -18,8 +24,9 @@ export class ContentController {
       response = e;
     }
 
+    // if the value we have isn't an id/couldn't be found try to search for it
     if (!caughtError) {
-      const returnObject = this.contentService.getFields(['id', 'name', 'created', 'url'], response.data);
+      const returnObject = await this.contentService.getFields(['id', 'name', 'created', 'url'], response.data);
       if (returnObject && !Array.isArray(returnObject)) {
         returnObject.url = this.contentService.getContentUrl(contentId);
         return returnObject;
@@ -33,7 +40,6 @@ export class ContentController {
       } catch (e) {
         throw e;
       }
-      // throw new NotFoundException();
     }
   }
 }
