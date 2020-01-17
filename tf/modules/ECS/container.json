@@ -1,0 +1,21 @@
+[
+  {
+    "name": "acoustic-challenge-api",
+    "image": "508511800738.dkr.ecr.us-east-1.amazonaws.com/acoustic-challenge-api:latest",
+    "essential": true,
+    "portMappings": [
+      {
+        "containerPort": 3000,
+        "protocol": "tcp"
+      }
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/acoustic-api",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "api"
+      }
+    }
+  }
+]
